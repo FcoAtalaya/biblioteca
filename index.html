@@ -255,6 +255,9 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
 .scan-eyebrow{font-size:10.5px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;opacity:.75}
 .scan-count{font-family:var(--serif);font-size:26px;line-height:1.1}
 .scan-tools{display:flex;gap:8px}
+.scan-queue{font-size:12px;opacity:.8;min-height:16px}
+.scan-warn{position:absolute;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 96px);z-index:3;background:var(--paper);color:var(--ink);border-left:3px solid var(--warn);border-radius:var(--r);padding:10px 12px;font-size:13px;line-height:1.4}
+.scan-warn b{font-weight:500}
 .scan-btn{appearance:none;font:inherit;font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.75);border-radius:999px;background:rgba(0,0,0,.35);color:#fff;cursor:pointer}
 .scan-btn.solid{background:#fff;color:var(--ink);border-color:#fff}
 .scan-btn[aria-pressed="true"]{background:#fff;color:var(--ink)}
@@ -457,7 +460,9 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
         <input class="input" id="api-key" placeholder="AIza…" autocomplete="off" style="flex:1;min-width:220px">
         <button class="btn" id="api-save">Guardar</button>
+        <button class="btn ghost" id="api-test">Probar</button>
       </div>
+      <div class="notice" id="api-result" style="margin-top:12px" hidden></div>
     </div>
     <div class="panel">
       <div class="eyebrow">Almacenamiento</div>
@@ -479,12 +484,13 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
 <div class="scanner" id="scanner" hidden role="dialog" aria-label="Escanear con la cámara">
   <video id="scan-video" playsinline muted autoplay></video>
   <div class="scan-top">
-    <div><div class="scan-eyebrow">Escaneando</div><div class="scan-count" id="scan-count">0 libros</div></div>
+    <div><div class="scan-eyebrow">Escaneando</div><div class="scan-count" id="scan-count">0 libros</div><div class="scan-queue" id="scan-queue"></div></div>
     <div class="scan-tools">
       <button class="scan-btn" type="button" id="scan-torch" hidden aria-pressed="false">Linterna</button>
       <button class="scan-btn solid" type="button" id="scan-done">Terminar</button>
     </div>
   </div>
+  <div class="scan-warn" id="scan-warn" hidden><b>Google Books está limitando las consultas</b> desde esta conexión y cada libro espera a que vuelva a responder. Con tu clave de API de Google Books (pestaña Datos, en este navegador) desaparece el límite.</div>
   <div class="scan-guide" id="scan-guide"><span class="scan-hint" id="scan-hint">Encuadra el código de barras</span></div>
   <div class="scan-err" id="scan-err" hidden></div>
   <div class="scan-bottom">
@@ -1553,10 +1559,18 @@ async function apiFetch(url) {
       // Ojo: cuando Google corta por exceso de consultas a veces responde sin
       // cabeceras CORS y el navegador solo ve un fallo de red. Se reintenta igual.
       lastMsg = 'sin respuesta (posible límite de consultas o bloqueo del navegador)';
+      if (host === 'www.googleapis.com' && navigator.onLine) state.rateLimited = true;
     }
     if (res) {
       if (res.status === 404) return null;
       if (res.ok) return res.json();
+      if (res.status === 403) {
+        // 403 puede ser límite de consultas o una clave rechazada (restringida a otra web,
+        // API sin activar…). Lo segundo no se arregla esperando: se avisa ya.
+        let j = null; try { j = await res.clone().json(); } catch (e) { /* */ }
+        const er = j && j.error, why = er ? [er.message, ...(er.errors || []).map(x => x.reason), er.status].filter(Boolean).join(' ') : '';
+        if (why && !/limit|quota|exhaust/i.test(why)) throw new NetError(`clave rechazada (403): ${er.message || why}`);
+      }
       if (res.status === 429 || res.status === 403 || res.status >= 500) {
         lastMsg = res.status >= 500 ? `error del servidor (${res.status})` : `límite de consultas alcanzado (${res.status})`;
         if (res.status !== 500) state.rateLimited = state.rateLimited || host === 'www.googleapis.com';
@@ -1611,12 +1625,14 @@ function fromGoogleItem(it) {
     _ids: ids.map(i => Core.normalize(i.identifier)).filter(Boolean),
   };
 }
+/* Devuelve { hit, miss }: miss explica por qué no hay resultado (para el aviso del libro). */
 async function googleByISBN(isbn) {
   const j = await apiFetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=5&printType=all${gbKey()}`);
-  if (!j || !j.items) return null;
+  if (!j) return { hit: null, miss: 'no responde' };
+  if (!j.items || !j.items.length) return { hit: null, miss: gbApiKey() ? '0 resultados' : '0 resultados, sin clave de API' };
   // Solo se acepta un resultado cuyo identificador coincide con el ISBN buscado
   const hit = j.items.map(fromGoogleItem).find(d => d._ids.includes(isbn));
-  return hit && hit.title ? hit : null;
+  return hit && hit.title ? { hit, miss: '' } : { hit: null, miss: `${j.items.length} resultado${j.items.length === 1 ? '' : 's'} de otro ISBN` };
 }
 let olViaJsonp = false;
 async function olByISBN(isbn) {
@@ -1982,14 +1998,20 @@ async function mejorPortada(url) {
     await coverTurn(v);
     const d = await loadImg(v);
     if (d && !isRelleno(d.w, d.h, v)) return { url: v, w: d.w, h: d.h, low: d.w < MIN_ANCHO };
+    // Portada por ISBN de Open Library (default=false): si la grande no existe, la mediana
+    // tampoco; no se gasta otro turno de 3 s en comprobarlo.
+    if (!d && /covers\.openlibrary\.org\/b\/isbn\//.test(v)) break;
   }
   return null;
 }
 const olIsbnCover = (isbn, size = 'L') => `https://covers.openlibrary.org/b/isbn/${isbn}-${size}.jpg?default=false`;
 const cegalCover = isbn => `https://static.cegal.es/imagenes/marcadas/${isbn.slice(0, 7)}/${isbn.slice(0, 12)}.gif`;
 /* Portada de Open Library por id (sin límite) a partir del ISBN. */
+/* Devuelve la URL, null si Open Library confirma que no tiene portada para ese ISBN
+   (sin edición o edición sin portada) o undefined si no se pudo saber (fallo de red). */
 async function olCoverById(isbn) {
-  const ed = await apiFetch(`https://openlibrary.org/isbn/${isbn}.json`).catch(() => null);
+  let ed;
+  try { ed = await apiFetch(`https://openlibrary.org/isbn/${isbn}.json`); } catch (e) { return undefined; }
   const id = ed && (ed.covers || []).find(c => c > 0);
   return id ? `https://covers.openlibrary.org/b/id/${id}-L.jpg` : null;
 }
@@ -2008,6 +2030,9 @@ async function bestCoverForIsbn(isbn, { googleUrl = null, olUrl = null } = {}) {
     })().catch(() => null),
     (async () => {
       const byId = olUrl || await olCoverById(isbn);
+      // La portada por ISBN tiene un límite estricto (un turno cada 3 s para todos los libros):
+      // solo se pide si no se ha podido saber si Open Library tiene portada o si la suya no carga.
+      if (byId === null) return null;
       return (byId && await mejorPortada(byId)) || await mejorPortada(olIsbnCover(isbn));
     })().catch(() => null),
   ]);
@@ -2162,14 +2187,19 @@ async function editionToWork(d, isbn, step, olEdition = null) {
 }
 const samePersonLoose = (a, b) => Core.samePerson(a, b) || (nameTokensAll(a).length && tokensCovered(nameTokensAll(a), nameTokensAll(b)) && tokensCovered(nameTokensAll(b), nameTokensAll(a)));
 
-async function lookupISBN(isbn, step) {
-  let g = null, gErr = null, o = null, oErr = null;
+async function lookupISBN(isbn, step, onBasic) {
+  // Tiempo de cada fase (ms), para ver dónde se va la espera
+  const T = {}; let t0 = performance.now();
+  const lap = k => { const n = performance.now(); T[k] = Math.round(n - t0); t0 = n; };
+  let g = null, gErr = null, gMiss = '', o = null, oErr = null;
   step && step('Consultando Google Books');
-  try { g = await googleByISBN(isbn); } catch (e) { gErr = e; }
+  try { ({ hit: g, miss: gMiss } = await googleByISBN(isbn)); } catch (e) { gErr = e; }
+  lap('google');
   const pubBlacklisted = g && g.publisher && !Core.cleanPublisher(g.publisher);
   if (!g || missingCore(g) >= 2 || pubBlacklisted) {
     step && step('Consultando Open Library');
     try { o = await olByISBN(isbn); } catch (e) { oErr = e; }
+    lap('ol');
   }
   let d = null;
   if (g && o) {
@@ -2180,15 +2210,18 @@ async function lookupISBN(isbn, step) {
     d.source = 'Google Books + Open Library';
   } else d = g || o;
   if (!d) {
-    if (gErr && oErr) return { found: false, error: `Google Books: ${gErr.message}; Open Library: ${oErr.message}` };
-    if (gErr) return { found: false, error: `Google Books: ${gErr.message} (Open Library no lo tiene)` };
-    if (oErr) return { found: false, error: `Open Library: ${oErr.message} (Google Books no lo tiene)` };
-    return { found: false };
+    if (gErr && oErr) return { found: false, timing: T, error: `Google Books: ${gErr.message}; Open Library: ${oErr.message}` };
+    if (gErr) return { found: false, timing: T, error: `Google Books: ${gErr.message} (Open Library no lo tiene)` };
+    if (oErr) return { found: false, timing: T, error: `Open Library: ${oErr.message} (Google Books no lo tiene)` };
+    return { found: false, timing: T, gMiss };
   }
+  if (onBasic) { try { onBasic({ title: d.title, authors: [...(d.authors || [])] }); } catch (e) { /* */ } }
   await editionToWork(d, isbn, step, o);
+  lap('obra');
   step && step('Comprobando portada');
   await chooseCover(d, isbn, o);
-  return { found: true, data: d };
+  lap('portada');
+  return { found: true, data: d, timing: T };
 }
 async function searchByTitle(title, author) {
   const out = [], errors = [];
@@ -2232,7 +2265,7 @@ function findDuplicate(isbn13, selfId) {
   return null;
 }
 const isbnLocks = new Map();
-async function resolveByISBN(rec, isbn, step) {
+async function resolveByISBN(rec, isbn, step, onBasic) {
   // Dos fotos del mismo libro consultándose a la vez: la segunda espera a la
   // primera para que la detección de duplicados la vea ya registrada.
   const prev = isbnLocks.get(isbn);
@@ -2240,10 +2273,10 @@ async function resolveByISBN(rec, isbn, step) {
   const mine = new Promise(r => { release = r; });
   isbnLocks.set(isbn, mine);
   if (prev) await prev;
-  try { return await resolveByISBNUnlocked(rec, isbn, step); }
+  try { return await resolveByISBNUnlocked(rec, isbn, step, onBasic); }
   finally { release(); if (isbnLocks.get(isbn) === mine) isbnLocks.delete(isbn); }
 }
-async function resolveByISBNUnlocked(rec, isbn, step) {
+async function resolveByISBNUnlocked(rec, isbn, step, onBasic) {
   clearMeta(rec);
   rec.isbn13 = isbn; rec.lookupError = ''; rec.duplicateOf = null; rec.candidates = rec.candidates && rec.status === 'varios' ? rec.candidates : null;
   const dup = findDuplicate(isbn, rec.id);
@@ -2253,14 +2286,15 @@ async function resolveByISBNUnlocked(rec, isbn, step) {
     rec.reason = 'El mismo ISBN ya está registrado en otra foto.';
     return rec;
   }
-  const res = await lookupISBN(isbn, step);
+  const res = await lookupISBN(isbn, step, onBasic);
+  if (res.timing) rec.timing = { ...(rec.timing || {}), steps: res.timing };
   if (res.found) {
     applyData(rec, res.data);
     rec.status = 'registrado'; rec.reason = '';
   } else {
     rec.status = 'no_encontrado';
     rec.lookupError = res.error || '';
-    rec.reason = res.error ? 'No se pudo consultar: ' + res.error + '.' : 'ISBN leído correctamente, pero no aparece en Google Books ni en Open Library.';
+    rec.reason = res.error ? 'No se pudo consultar: ' + res.error + '.' : `ISBN leído correctamente, pero no aparece en Google Books${res.gMiss ? ` (${res.gMiss})` : ''} ni en Open Library.`;
   }
   return rec;
 }
@@ -2538,6 +2572,8 @@ const scan = {
   cand: null, hits: 0, candAt: 0,
   log: [], logHTML: '', timer: 0, flashT: 0, tick: 0, frame: null, zx: null,
   shots: Promise.resolve(),
+  basic: new Map(),       // id → título y autor ya encontrados mientras se completan los datos
+  active: new Set(),      // ids consultándose ahora mismo
 };
 state.scanning = false;
 
@@ -2657,7 +2693,7 @@ async function runScanLoop() {
       try { const raws = await detectFrame(v); if (raws.length && my === scan.loop) onScanCodes(raws); }
       catch (e) { /* fotograma no legible: siguiente */ }
     }
-    await sleep(scan.mode === 'native' ? 70 : 40);
+    await sleep(scan.mode === 'native' ? 70 : 90);   // con ZXing deja aire al resto de la página
   }
 }
 async function detectFrame(v) {
@@ -2743,10 +2779,14 @@ async function acceptScan(isbn) {
 async function lookupScanned(rec) {
   if (!state.records.has(rec.id)) return;           // deshecho antes de consultar
   const t1 = performance.now();
-  try { await resolveByISBN(rec, rec.isbn13); }
+  rec.timing = { queue: Math.max(0, Date.now() - rec.addedAt) };
+  scan.active.add(rec.id);
+  const onBasic = b => { scan.basic.set(rec.id, b); if (scan.open) renderScanLog(); };
+  try { await resolveByISBN(rec, rec.isbn13, null, onBasic); }
   catch (e) { rec.status = 'no_encontrado'; rec.reason = 'Error al consultar: ' + (e && e.message || e); rec.lookupError = String(e && e.message || e); }
+  scan.active.delete(rec.id); scan.basic.delete(rec.id);
   if (!state.records.has(rec.id)) return;           // deshecho mientras se consultaba
-  rec.timing = { lookup: Math.round(performance.now() - t1) };
+  rec.timing = { ...rec.timing, lookup: Math.round(performance.now() - t1) };
   await save(rec); renderItem(rec); renderSummary(); renderLibCount();
   if (scan.open) renderScanLog();
 }
@@ -2810,7 +2850,11 @@ function scanEntryView(e) {
   if (!r) return { cls: 'undone', st: 'Quitado', tt: isbnTxt || 'Foto', sub: '' };
   const undo = true;
   switch (r.status) {
-    case 'procesando': return { cls: '', st: e.kind === 'shot' ? 'Foto · ISBN leído' : 'Leído', tt: isbnTxt || Core.pretty(r.isbn13 || ''), sub: 'Buscando el libro…', img: cover(r), undo };
+    case 'procesando': {
+      const bs = scan.basic.get(r.id);
+      if (bs) return { cls: 'ok', st: 'Encontrado', tt: bs.title || isbnTxt, sub: [(bs.authors || [])[0], 'completando datos y portada…'].filter(Boolean).join(' · '), img: cover(r), undo };
+      return { cls: '', st: e.kind === 'shot' ? 'Foto · ISBN leído' : 'Leído', tt: isbnTxt || Core.pretty(r.isbn13 || ''), sub: scan.active.has(r.id) ? 'Buscando el libro…' : 'En cola para buscar…', img: cover(r), undo };
+    }
     case 'registrado': return { cls: 'ok', st: 'Añadido', tt: r.title || isbnTxt, sub: who(r) || isbnTxt, img: cover(r), undo };
     case 'duplicado': return { cls: 'warn', st: 'Ya lo tienes', tt: r.title || isbnTxt, sub: 'Queda en la lista como posible duplicado', img: cover(r), undo };
     case 'no_encontrado': return { cls: 'warn', st: r.lookupError ? 'Consulta fallida' : 'No encontrado', tt: 'ISBN ' + Core.pretty(r.isbn13), sub: r.lookupError ? 'Podrás reintentarla al terminar' : 'Queda en la lista para completarlo', img: cover(r), undo };
@@ -2830,6 +2874,10 @@ function renderScanLog() {
   if (html !== scan.logHTML) { $('#scan-log').innerHTML = html; scan.logHTML = html; }
   const n = scan.log.filter(e => (e.kind === 'rec' || e.kind === 'shot') && !e.undone && (!e.recId || state.records.has(e.recId))).length;
   $('#scan-count').textContent = `${n} libro${n === 1 ? '' : 's'}`;
+  const pend = lookupQ.jobs.length + lookupQ.active;
+  $('#scan-queue').textContent = pend ? `${pend} búsqueda${pend === 1 ? '' : 's'} en marcha` : '';
+  // Google Books corta las consultas anónimas (sin clave) — muy habitual con datos móviles
+  $('#scan-warn').hidden = !(state.rateLimited && !gbApiKey());
 }
 async function undoScan(id) {
   const e = scan.log.find(x => x.id === id);
@@ -2897,7 +2945,17 @@ function itemHTML(r) {
     if (r.editionYear) facts.push(`Edición de ${r.editionYear}`);
     if ((r.translators || []).length) facts.push('Trad./otros: ' + r.translators.join(', '));
   }
-  if (r.timing && r.timing.read != null) facts.push(`Lectura ${(r.timing.read / 1000).toFixed(1).replace('.', ',')} s` + (r.timing.lookup != null ? ` · Consulta ${(r.timing.lookup / 1000).toFixed(1).replace('.', ',')} s` : ''));
+  if (r.timing) {
+    const tm = r.timing, secs = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s', parts = [];
+    if (tm.read != null) parts.push('Lectura ' + secs(tm.read));
+    if (tm.queue >= 1000) parts.push('En cola ' + secs(tm.queue));
+    if (tm.lookup != null) {
+      const st = tm.steps || {};
+      const br = [['google', 'Google'], ['ol', 'Open Library'], ['obra', 'obra y autor'], ['portada', 'portada']].filter(([k]) => st[k] != null).map(([k, l]) => `${l} ${secs(st[k])}`);
+      parts.push('Consulta ' + secs(tm.lookup) + (br.length ? ` (${br.join(' · ')})` : ''));
+    }
+    if (parts.length) facts.push(parts.join(' · '));
+  }
   const metaLine = [authorsStr(r) + (r.authorBirth ? ` (${lifeSpan(r)})` : ''), r.year ? fmtYear(r.year) : '', r.publisher].filter(Boolean).join(' · ');
   const dupOf = r.duplicateOf && state.records.get(r.duplicateOf);
   let actions = '';
@@ -2908,7 +2966,7 @@ function itemHTML(r) {
       <button class="btn ghost sm" data-act="fix">${state.openFixer === r.id ? 'Cerrar' : 'Editar'}</button></div>`;
   } else {
     actions = `<div class="btn-row actions"><button class="btn sm ${state.openFixer === r.id ? '' : 'primary'}" data-act="fix">${state.openFixer === r.id ? 'Cerrar' : (r.status === 'varios' ? 'Elegir ISBN' : r.status === 'duplicado' ? 'Resolver' : 'Corregir')}</button>
-      ${r.lookupError ? `<button class="btn ghost sm" data-act="retry">Reintentar búsqueda</button>` : ''}</div>`;
+      ${r.lookupError || r.status === 'no_encontrado' ? `<button class="btn ghost sm" data-act="retry">Reintentar búsqueda</button>` : ''}</div>`;
   }
   return `
     ${thumbHTML(r)}
@@ -4062,6 +4120,7 @@ function bind() {
     const fl = e.target.files[0]; e.target.value = '';
     if (fl) { try { await importCSV(fl); } catch (err) { $('#import-result').innerHTML = `<div class="notice danger">Error al importar: ${esc(err.message)}</div>`; } }
   });
+  $('#api-test').addEventListener('click', testGoogleKey);
   $('#api-save').addEventListener('click', () => { meta.apiKey = $('#api-key').value.trim(); saveMeta(); toast(meta.apiKey ? 'Clave guardada en este navegador.' : 'Clave borrada: Google Books se consultará sin clave.'); });
   $('#wipe-btn').addEventListener('click', async e => {
     const btn = e.currentTarget;
@@ -4425,6 +4484,33 @@ const Drive = (() => {
 
   return { start, sync, connect, disconnect, noteDeleted, render, get state() { return st; }, get status() { return status; }, _merge: merge, _setToken: (t, exp) => { token = t; tokenExp = exp; } };
 })();
+
+/* Prueba directa de Google Books con la clave de este navegador: enseña la respuesta tal cual */
+async function testGoogleKey() {
+  const btn = $('#api-test'), box = $('#api-result');
+  const typed = $('#api-key').value.trim(), key = typed || gbApiKey();
+  const show = (cls, html) => { box.className = 'notice' + (cls ? ' ' + cls : ''); box.innerHTML = html; box.hidden = false; };
+  const done = busy(btn, 'Probando…');
+  const saved = key && key === gbApiKey() ? 'guardada en este navegador' : key ? '<b>escrita pero sin guardar</b>: pulsa Guardar' : '';
+  try {
+    const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:9788437604947&maxResults=1${key ? '&key=' + encodeURIComponent(key) : ''}`;
+    let res;
+    try { res = await fetch(url, { cache: 'no-store' }); }
+    catch (e) { show('danger', '<b>Google Books no responde.</b> El navegador no recibe respuesta (sin conexión, o Google corta sin avisar por exceso de consultas).'); return; }
+    let j = null; try { j = await res.json(); } catch (e) { /* */ }
+    const msg = j && j.error ? esc(j.error.message || '') + (j.error.errors && j.error.errors[0] && j.error.errors[0].reason ? ` (${esc(j.error.errors[0].reason)})` : '') : '';
+    if (res.ok) {
+      const n = (j && j.totalItems) || 0;
+      show(n ? 'ok' : '', key
+        ? `<b>La clave funciona</b> (${saved}). Google ha respondido a una búsqueda de prueba con ${n} resultado${n === 1 ? '' : 's'}.`
+        : `<b>No hay clave.</b> Google responde sin clave (${n} resultado${n === 1 ? '' : 's'}), pero con límites más bajos.`);
+    } else if (res.status === 400 || res.status === 403) {
+      show('danger', `<b>Google rechaza la petición (${res.status}).</b> ${msg || 'Sin detalle.'}<br><span class="small">Si habla de «referer» o de restricciones, la clave está limitada en Google Cloud a otras webs: añade <code>${esc(location.origin)}/*</code> en sus restricciones de sitios web. Si dice que la API no está habilitada, activa «Books API» en ese proyecto.</span>`);
+    } else if (res.status === 429) {
+      show('danger', `<b>Límite de consultas alcanzado (429).</b> ${msg}`);
+    } else show('danger', `<b>Respuesta inesperada de Google (${res.status}).</b> ${msg}`);
+  } finally { done(); }
+}
 
 /* ---------------- arranque ---------------- */
 async function init() {

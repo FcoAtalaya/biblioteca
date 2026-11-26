@@ -243,6 +243,42 @@ table.diff th{position:sticky;top:0;background:var(--tint);text-align:left;font-
 table.diff td{border-top:1px solid var(--rule);padding:6px 8px;vertical-align:top;word-break:break-word}
 table.diff td.old{color:var(--muted);text-decoration:line-through}
 
+/* ---------- Añadir libros / escáner ---------- */
+.add-btns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.add-btns .btn{min-height:56px;font-size:14px;padding:0 24px}
+@media (max-width:559px){.add-btns{flex-direction:column;align-items:stretch;max-width:320px;margin:0 auto}}
+.btn.disabled{opacity:.4;pointer-events:none}
+#shot-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.scanner{position:fixed;inset:0;z-index:70;background:#000;color:#fff;overflow:hidden;touch-action:manipulation}
+.scanner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scan-top{position:absolute;left:0;right:0;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 14px) 16px 28px;background:linear-gradient(rgba(0,0,0,.6),transparent)}
+.scan-eyebrow{font-size:10.5px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;opacity:.75}
+.scan-count{font-family:var(--serif);font-size:26px;line-height:1.1}
+.scan-tools{display:flex;gap:8px}
+.scan-btn{appearance:none;font:inherit;font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;min-height:44px;padding:0 16px;border:1px solid rgba(255,255,255,.75);border-radius:999px;background:rgba(0,0,0,.35);color:#fff;cursor:pointer}
+.scan-btn.solid{background:#fff;color:var(--ink);border-color:#fff}
+.scan-btn[aria-pressed="true"]{background:#fff;color:var(--ink)}
+.scan-btn:disabled{opacity:.45}
+.scan-guide{position:absolute;left:50%;top:36%;z-index:1;transform:translate(-50%,-50%);width:min(84vw,480px);aspect-ratio:2/1;border:2px solid rgba(255,255,255,.9);border-radius:8px;box-shadow:0 0 0 100vmax rgba(0,0,0,.38);transition:border-color .12s,background-color .12s,box-shadow .12s}
+.scan-guide.hit{border-color:#22c55e;background:rgba(34,197,94,.32);box-shadow:0 0 0 100vmax rgba(0,0,0,.38),0 0 0 4px rgba(34,197,94,.5)}
+.scan-hint{position:absolute;left:0;right:0;top:calc(100% + 10px);text-align:center;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.scan-err{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);z-index:3;background:var(--paper);color:var(--ink);border-radius:var(--r);padding:18px;font-size:14px}
+.scan-bottom{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:40px 14px calc(env(safe-area-inset-bottom) + 14px);background:linear-gradient(transparent,rgba(0,0,0,.7) 45%)}
+.scan-log{list-style:none;margin:0 auto 12px;padding:0;display:flex;flex-direction:column;gap:6px;max-width:560px}
+.scan-log li{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.95);color:var(--ink);border-radius:var(--r);padding:8px 10px;min-height:58px;animation:scanIn .18s ease-out}
+.scan-log li.old{opacity:.72}
+.scan-log li.undone{opacity:.5}
+.scan-log .sc{width:28px;height:42px;flex:none;border-radius:2px;background:var(--tint);object-fit:cover}
+.scan-log .tx{flex:1;min-width:0}
+.scan-log .st{font-size:10px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.scan-log .ok .st{color:var(--ok)}
+.scan-log .warn .st{color:var(--warn)}
+.scan-log .tt{font-size:14px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scan-log .sub{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scan-log button{appearance:none;font:inherit;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--rule-2);background:var(--paper);border-radius:var(--r);min-height:36px;padding:0 10px;flex:none;cursor:pointer}
+.scan-actions{display:flex;justify-content:center;gap:10px}
+.scan-note{margin:8px 0 0;text-align:center;font-size:12px;opacity:.75}
+@keyframes scanIn{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
 .drive-pill{appearance:none;font:inherit;font-size:12px;line-height:1;padding:8px 12px;margin-bottom:4px;border:1px solid var(--rule-2);border-radius:999px;background:var(--paper);color:var(--muted);cursor:pointer;white-space:nowrap}
 .drive-pill.attn{border-color:var(--warn);color:var(--warn);font-weight:500}
 .foot{padding:28px 0 40px;font-size:12px;color:var(--muted)}
@@ -288,11 +324,16 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
 
     <div class="drop" id="drop">
       <div class="eyebrow">Paso 1</div>
-      <h2 class="h2">Sube las fotos</h2>
-      <p class="lede" style="margin:0 0 18px">Código de barras o ISBN impreso. JPEG, PNG o HEIC, todas de una vez.</p>
-      <label class="btn primary" for="file-input" id="pick-btn">Seleccionar fotos</label>
+      <h2 class="h2">Añade los libros</h2>
+      <p class="lede" style="margin:0 0 18px">Escanea los códigos de barras uno tras otro con la cámara, haz una foto o sube las que ya tengas (JPEG, PNG o HEIC, todas de una vez).</p>
+      <div class="add-btns">
+        <button class="btn primary" type="button" id="scan-btn" hidden>Escanear con la cámara</button>
+        <label class="btn" for="shot-input" id="shot-btn" hidden>Hacer foto</label>
+        <label class="btn primary" for="file-input" id="pick-btn">Subir fotos</label>
+      </div>
       <input type="file" id="file-input" multiple accept="image/*,.heic,.heif,.HEIC,.HEIF">
-      <p class="small">Las fotos no salen del dispositivo. Solo se consulta el ISBN a Google Books y Open Library.</p>
+      <input type="file" id="shot-input" accept="image/*" capture="environment">
+      <p class="small">Ni las fotos ni la imagen de la cámara salen del dispositivo. Solo se consulta el ISBN a Google Books y Open Library.</p>
     </div>
 
     <div id="list-wrap" hidden>
@@ -433,6 +474,27 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
 
 
 <div class="modal" id="modal" hidden><div class="sheet" id="sheet"></div></div>
+
+<!-- Escáner de códigos de barras con la cámara -->
+<div class="scanner" id="scanner" hidden role="dialog" aria-label="Escanear con la cámara">
+  <video id="scan-video" playsinline muted autoplay></video>
+  <div class="scan-top">
+    <div><div class="scan-eyebrow">Escaneando</div><div class="scan-count" id="scan-count">0 libros</div></div>
+    <div class="scan-tools">
+      <button class="scan-btn" type="button" id="scan-torch" hidden aria-pressed="false">Linterna</button>
+      <button class="scan-btn solid" type="button" id="scan-done">Terminar</button>
+    </div>
+  </div>
+  <div class="scan-guide" id="scan-guide"><span class="scan-hint" id="scan-hint">Encuadra el código de barras</span></div>
+  <div class="scan-err" id="scan-err" hidden></div>
+  <div class="scan-bottom">
+    <ol class="scan-log" id="scan-log"></ol>
+    <div class="scan-actions">
+      <button class="scan-btn" type="button" id="scan-shot">Hacer foto</button>
+    </div>
+    <p class="scan-note">¿No lo lee? Haz una foto: se busca el código o el ISBN impreso.</p>
+  </div>
+</div>
 <datalist id="dl-tags"></datalist>
 <datalist id="dl-shelves"></datalist>
 
@@ -1249,7 +1311,7 @@ function enhanceForOCR(c) {
 
 /* ---------------- código de barras ---------------- */
 let barcodeDetector;   // undefined: sin comprobar · false: no disponible
-async function readBarcode(src) {
+async function nativeDetector() {
   if (barcodeDetector === undefined) {
     barcodeDetector = false;
     try {
@@ -1259,6 +1321,10 @@ async function readBarcode(src) {
       }
     } catch (e) { barcodeDetector = false; }
   }
+  return barcodeDetector;
+}
+async function readBarcode(src) {
+  await nativeDetector();
   if (barcodeDetector) {
     try {
       for (const r of await barcodeDetector.detect(src)) {
@@ -2237,7 +2303,7 @@ function batchRecords(batchId) {
   return [...state.records.values()].filter(r => r.batchId === batchId);
 }
 
-async function processFiles(fileList) {
+async function processFiles(fileList, opts = {}) {
   if (state.running) { toast('Ya hay un proceso en marcha.'); return; }
   const files = [...fileList];
   const imgs = files.filter(isImageFile);
@@ -2251,8 +2317,12 @@ async function processFiles(fileList) {
 
   let batch = meta.batch;
   const continuing = batch && !batch.finished && imgs.some(f => { const r = byKey.get(fileKey(f)); return r && r.batchId === batch.id; });
-  if (!continuing) batch = { id: Date.now(), total: toDo.length, finished: false, startedAt: new Date().toISOString() };
+  // Fotos hechas con «Hacer foto» de una en una: se suman al mismo lote durante un rato
+  const appendShot = opts.shot && batch && batch.kind === 'foto' && Date.now() - (batch.lastAt || batch.id) < 3 * 3600e3;
+  if (appendShot) { batch.finished = false; batch.total = batchRecords(batch.id).length + toDo.length; }
+  else if (!continuing) batch = { id: Date.now(), total: toDo.length, finished: false, startedAt: new Date().toISOString(), ...(opts.shot ? { kind: 'foto' } : {}) };
   else batch.total = Math.max(batch.total, batchRecords(batch.id).length + toDo.length);
+  batch.lastAt = Date.now();
   meta.batch = batch; saveMeta();
 
   if (!toDo.length) {
@@ -2265,9 +2335,9 @@ async function processFiles(fileList) {
   state.running = true; state.stop = false;
   keepAwake(true);
   $('#progress').hidden = false; $('#resume').hidden = true;
-  $('#pick-btn').classList.add('disabled');
+  setAddButtons(false);
   const extra = [];
-  if (continuing) extra.push(`Continuando el proceso anterior.`);
+  if (continuing && !appendShot) extra.push(`Continuando el proceso anterior.`);
   if (skipped) extra.push(`${skipped} foto${skipped === 1 ? '' : 's'} ya procesada${skipped === 1 ? '' : 's'}: se omite${skipped === 1 ? '' : 'n'}.`);
   if (ignored) extra.push(`${ignored} archivo${ignored === 1 ? '' : 's'} no es imagen: ignorado${ignored === 1 ? '' : 's'}.`);
   state.progressNote = extra.join(' ');
@@ -2322,12 +2392,14 @@ async function processFiles(fileList) {
   batch.endedAt = new Date().toISOString();
   saveMeta();
   $('#progress').hidden = true;
-  $('#pick-btn').classList.remove('disabled');
+  setAddButtons(true);
   state.progressNote = '';
   renderAll();
   const s = $('#summary');
   if (!s.hidden) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast(state.stop ? 'Proceso detenido. Puedes continuar seleccionando las mismas fotos.' : 'Proceso terminado.');
+  const shot = opts.shot && toDo.length === 1 ? batchRecords(batch.id).find(r => r.fileKey === fileKey(toDo[0])) : null;
+  if (shot) toast(shot.status === 'registrado' ? `Añadido: «${shot.title || Core.pretty(shot.isbn13)}»` : `${STATUS_TEXT[shot.status] || 'Procesada'}: revísala en la lista.`, 4200);
+  else toast(state.stop ? 'Proceso detenido. Puedes continuar seleccionando las mismas fotos.' : 'Proceso terminado.');
 }
 
 /* Las consultas a las APIs van en una cola aparte con varios carriles: mientras
@@ -2451,6 +2523,331 @@ async function processOne(file, batchId, seq, step) {
   }
 }
 
+/* ---------------- escáner con la cámara (lotes continuos) ----------------
+   La cámara queda abierta y cada código de barras que entra en el recuadro se
+   registra solo: hace falta leer el mismo ISBN dos veces seguidas (evita lecturas
+   falsas) y cada ISBN cuenta una sola vez por sesión. Solo aviso visual (verde).
+   Si un código no se deja leer, «Hacer foto» manda el fotograma al circuito de
+   las fotos (código de barras y, si no, OCR del ISBN impreso). */
+const CAN_SCAN = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && window.isSecureContext !== false;
+const scan = {
+  open: false, stream: null, loop: 0, mode: '', batch: null, seq: 0,
+  seen: new Map(),        // isbn → última vez que se vio (ya tratado en esta sesión)
+  undone: new Set(),      // ISBN deshechos: se pueden volver a escanear cuando salen del recuadro
+  noise: new Map(),       // avisos ya mostrados (para no repetirlos)
+  cand: null, hits: 0, candAt: 0,
+  log: [], logHTML: '', timer: 0, flashT: 0, tick: 0, frame: null, zx: null,
+  shots: Promise.resolve(),
+};
+state.scanning = false;
+
+function setAddButtons(on) {
+  for (const id of ['#pick-btn', '#shot-btn']) $(id).classList.toggle('disabled', !on);
+  $('#scan-btn').disabled = !on;
+}
+function stamp() { return new Date().toLocaleString('sv-SE').replace(/:/g, '-'); }
+function renameShot(f) {
+  const ext = (/\.([a-z0-9]{2,5})$/i.exec(f.name || '') || [, 'jpg'])[1];
+  return new File([f], `Foto cámara ${stamp()}.${ext}`, { type: f.type || 'image/jpeg', lastModified: Date.now() });
+}
+function scanBatch() {
+  // El lote se crea con el primer libro: abrir y cerrar sin escanear no borra el resumen anterior
+  if (!scan.batch) {
+    scan.batch = { id: Date.now(), total: 0, finished: false, startedAt: new Date().toISOString(), kind: 'camara' };
+    meta.batch = scan.batch; saveMeta();
+  }
+  return scan.batch;
+}
+
+async function openScanner() {
+  if (state.running) { toast('Espera a que termine el proceso de fotos.'); return; }
+  if (scan.open) return;
+  scan.open = true; state.scanning = true;
+  scan.batch = null; scan.seq = 0; scan.log = []; scan.logHTML = '';
+  scan.seen.clear(); scan.undone.clear(); scan.noise.clear(); scan.cand = null; scan.hits = 0;
+  $('#scanner').hidden = false; document.body.style.overflow = 'hidden';
+  $('#scan-err').hidden = true; $('#scan-shot').disabled = false;
+  $('#scan-torch').hidden = true; $('#scan-torch').setAttribute('aria-pressed', 'false');
+  renderScanLog();
+  try { history.pushState({ scanner: 1 }, ''); } catch (e) { /* */ }   // «atrás» en Android cierra el escáner
+  keepAwake(true);
+  scan.timer = setInterval(renderScanLog, 500);
+  await startCamera();
+}
+function closeScanner(fromHistory) {
+  if (!scan.open) return;
+  scan.open = false; state.scanning = false;
+  clearInterval(scan.timer);
+  stopCamera();
+  $('#scanner').hidden = true; document.body.style.overflow = '';
+  if (!state.running) keepAwake(false);
+  if (!fromHistory && history.state && history.state.scanner) { try { history.back(); } catch (e) { /* */ } }
+  const b = scan.batch;
+  if (b) { b.finished = true; b.endedAt = new Date().toISOString(); b.total = batchRecords(b.id).length; saveMeta(); }
+  renderAll();
+  const n = b ? batchRecords(b.id).length : 0;
+  if (n) {
+    const s = $('#summary');
+    if (!s.hidden) s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const pend = batchRecords(b.id).filter(r => r.status === 'procesando').length;
+    toast(`Escaneo terminado: ${n} libro${n === 1 ? '' : 's'}.` + (pend ? ` Terminando ${pend} consulta${pend === 1 ? '' : 's'}…` : ''), 4200);
+  }
+}
+
+async function startCamera() {
+  const v = $('#scan-video');
+  stopCamera();
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+  } catch (e) { if (scan.open) showScanError(e); return false; }
+  if (!scan.open) { stream.getTracks().forEach(t => t.stop()); return false; }
+  scan.stream = stream;
+  v.srcObject = stream;
+  try { await v.play(); } catch (e) { /* autoplay: el vídeo está silenciado, debería arrancar igual */ }
+  const track = stream.getVideoTracks()[0];
+  try {
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (caps.focusMode && caps.focusMode.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    $('#scan-torch').hidden = !caps.torch;
+  } catch (e) { /* sin control de enfoque ni linterna */ }
+  scan.mode = (await nativeDetector()) ? 'native' : 'zxing';
+  if (scan.mode === 'zxing') {
+    try { await loadScript(CDN.zxing); }
+    catch (e) { showScanError({ name: 'zxing', message: e.message }); return false; }
+  }
+  $('#scan-err').hidden = true; $('#scan-shot').disabled = false;
+  runScanLoop();
+  return true;
+}
+function stopCamera() {
+  scan.loop++;
+  if (scan.stream) scan.stream.getTracks().forEach(t => t.stop());
+  scan.stream = null;
+  const v = $('#scan-video'); if (v) v.srcObject = null;
+}
+function showScanError(e) {
+  const n = e && e.name;
+  const msg = n === 'NotAllowedError' || n === 'SecurityError'
+    ? '<b>No hay permiso para usar la cámara.</b> Permítelo para esta web en los ajustes del navegador (el icono junto a la dirección) y vuelve a intentarlo.'
+    : n === 'NotFoundError' || n === 'OverconstrainedError' ? '<b>No se ha encontrado ninguna cámara.</b>'
+    : n === 'NotReadableError' ? '<b>La cámara está ocupada.</b> Cierra otras aplicaciones que la estén usando y vuelve a intentarlo.'
+    : n === 'zxing' ? '<b>No se pudo descargar el lector de códigos de barras.</b> Comprueba la conexión. ' + esc(e.message || '')
+    : '<b>No se pudo abrir la cámara.</b> ' + esc(e && e.message || '');
+  $('#scan-err').innerHTML = msg + `<div class="btn-row" style="margin-top:14px"><button class="btn primary sm" data-scan="retry">Reintentar</button><button class="btn ghost sm" data-scan="close">Cerrar</button></div>`;
+  $('#scan-err').hidden = false;
+  $('#scan-shot').disabled = true;
+}
+async function toggleTorch() {
+  const t = scan.stream && scan.stream.getVideoTracks()[0]; if (!t) return;
+  const b = $('#scan-torch'), on = b.getAttribute('aria-pressed') !== 'true';
+  try { await t.applyConstraints({ advanced: [{ torch: on }] }); b.setAttribute('aria-pressed', String(on)); }
+  catch (e) { toast('No se pudo cambiar la linterna.'); }
+}
+
+/* Bucle de lectura: un fotograma tras otro mientras la cámara esté abierta */
+async function runScanLoop() {
+  const my = ++scan.loop;
+  const v = $('#scan-video');
+  while (scan.open && my === scan.loop) {
+    if (v.readyState >= 2 && v.videoWidth && document.visibilityState === 'visible') {
+      try { const raws = await detectFrame(v); if (raws.length && my === scan.loop) onScanCodes(raws); }
+      catch (e) { /* fotograma no legible: siguiente */ }
+    }
+    await sleep(scan.mode === 'native' ? 70 : 40);
+  }
+}
+async function detectFrame(v) {
+  if (scan.mode === 'native') return (await barcodeDetector.detect(v)).map(r => r.rawValue);
+  // ZXing (iPhone): solo la zona del recuadro, alternando con un recorte más holgado
+  const r = guideRect(v, scan.tick++ % 2 ? 0.7 : 0.15);
+  if (r.w < 20 || r.h < 20) return [];
+  const k = Math.min(1, 760 / r.w);
+  const c = scan.frame || (scan.frame = document.createElement('canvas'));
+  c.width = Math.round(r.w * k); c.height = Math.round(r.h * k);
+  c.getContext('2d', { willReadFrequently: true }).drawImage(v, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+  const Z = window.ZXing;
+  if (!scan.zx) {
+    const h = new Map();
+    h.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13]);
+    h.set(Z.DecodeHintType.TRY_HARDER, true);
+    scan.zx = new Z.MultiFormatReader(); scan.zx.setHints(h);
+  }
+  try { return [scan.zx.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(c)))).getText()]; }
+  catch (e) { return []; }
+  finally { try { scan.zx.reset(); } catch (e) { /* */ } }
+}
+/* Recuadro guía en coordenadas del vídeo (el vídeo se muestra recortado, object-fit: cover) */
+function guideRect(v, m) {
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const e = v.getBoundingClientRect(), g = $('#scan-guide').getBoundingClientRect();
+  const s = Math.max(e.width / vw, e.height / vh);
+  const ox = (e.width - vw * s) / 2, oy = (e.height - vh * s) / 2;
+  let w = g.width / s, h = g.height / s;
+  let x = (g.left - e.left - ox) / s - w * m / 2, y = (g.top - e.top - oy) / s - h * m;
+  w *= 1 + m; h *= 1 + 2 * m;
+  x = Math.max(0, x); y = Math.max(0, y);
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(Math.min(vw - x, w)), h: Math.round(Math.min(vh - y, h)) };
+}
+
+function onScanCodes(raws) {
+  const now = Date.now();
+  const isbn = raws.map(Core.fromBarcode).find(Boolean);
+  if (!isbn) {
+    const code = String(raws[0] || '').replace(/\D/g, '');
+    if (code.length >= 8 && now - (scan.noise.get(code) || 0) > 8000) { scan.noise.set(code, now); addScanEntry({ kind: 'noisbn', code }); }
+    return;
+  }
+  if (scan.seen.has(isbn)) {
+    const last = scan.seen.get(isbn);
+    scan.seen.set(isbn, now);
+    if (scan.undone.has(isbn)) {
+      if (now - last < 2500) return;          // sigue delante tras deshacer: esperar a que salga
+      scan.undone.delete(isbn); scan.seen.delete(isbn);
+    } else {
+      // Vuelve a pasar un libro ya tratado (no el que sigue delante): avisar, sin añadir
+      if (now - last > 2500 && now - (scan.noise.get(isbn) || 0) > 8000) { scan.noise.set(isbn, now); addScanEntry({ kind: 'again', isbn }); }
+      return;
+    }
+  }
+  if (scan.cand === isbn && now - scan.candAt < 1500) scan.hits++;
+  else { scan.cand = isbn; scan.hits = 1; }
+  scan.candAt = now;
+  if (scan.hits < 2) return;
+  scan.cand = null; scan.hits = 0;
+  acceptScan(isbn);
+}
+function flashGuide() {
+  const g = $('#scan-guide');
+  g.classList.add('hit');
+  clearTimeout(scan.flashT);
+  scan.flashT = setTimeout(() => g.classList.remove('hit'), 650);
+}
+async function acceptScan(isbn) {
+  scan.seen.set(isbn, Date.now());
+  flashGuide();
+  const dup = findDuplicate(isbn);
+  if (dup) { addScanEntry({ kind: 'dup', isbn, dupId: dup.id }); return; }
+  const b = scanBatch();
+  const rec = newRecord({ batchId: b.id, seq: ++scan.seq, status: 'procesando', method: 'camara', isbn13: isbn });
+  const saved = save(rec);                         // queda en memoria al momento; la escritura sigue
+  addScanEntry({ kind: 'rec', isbn, recId: rec.id });
+  await saved;
+  b.total = batchRecords(b.id).length; saveMeta();
+  renderItem(rec); renderSummary();
+  enqueueLookup(() => lookupScanned(rec));
+}
+async function lookupScanned(rec) {
+  if (!state.records.has(rec.id)) return;           // deshecho antes de consultar
+  const t1 = performance.now();
+  try { await resolveByISBN(rec, rec.isbn13); }
+  catch (e) { rec.status = 'no_encontrado'; rec.reason = 'Error al consultar: ' + (e && e.message || e); rec.lookupError = String(e && e.message || e); }
+  if (!state.records.has(rec.id)) return;           // deshecho mientras se consultaba
+  rec.timing = { lookup: Math.round(performance.now() - t1) };
+  await save(rec); renderItem(rec); renderSummary(); renderLibCount();
+  if (scan.open) renderScanLog();
+}
+
+/* «Hacer foto» dentro del escáner: el fotograma actual va al circuito de las fotos */
+function takeScanShot() {
+  const v = $('#scan-video');
+  if (!scan.stream || !v.videoWidth) return;
+  const c = document.createElement('canvas');
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0);
+  const entry = addScanEntry({ kind: 'shot' });
+  const b = scanBatch(), seq = ++scan.seq;
+  c.toBlob(blob => {
+    if (!blob) { entry.kind = 'shotfail'; renderScanLog(); return; }
+    const file = new File([blob], `Foto cámara ${stamp()}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    scan.shots = scan.shots.then(async () => {
+      await processOne(file, b.id, seq, () => {});
+      const rec = batchRecords(b.id).find(r => r.fileKey === fileKey(file));
+      if (rec) {
+        entry.recId = rec.id; entry.isbn = rec.isbn13 || '';
+        if (rec.isbn13) scan.seen.set(rec.isbn13, Date.now());
+      } else entry.kind = 'shotfail';
+      b.total = batchRecords(b.id).length; saveMeta();
+      if (scan.open) renderScanLog();
+    }).catch(() => { entry.kind = 'shotfail'; });
+  }, 'image/jpeg', 0.92);
+}
+
+/* Mensajes del escáner */
+function addScanEntry(e) {
+  e.id = uid(); e.at = Date.now();
+  scan.log.push(e);
+  if (scan.log.length > 60) scan.log.splice(0, scan.log.length - 60);
+  renderScanLog();
+  return e;
+}
+function scanEntryView(e) {
+  const r = e.recId ? state.records.get(e.recId) : null;
+  const cover = x => {
+    const src = x && x.coverUrl && x.coverUrl !== SIN_PORTADA ? x.coverUrl : x && x.thumb;
+    return src ? `<img class="sc" src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<div class="sc"></div>';
+  };
+  const who = x => [authorsStr(x), x.year ? fmtYear(x.year) : ''].filter(Boolean).join(' · ');
+  const isbnTxt = e.isbn ? 'ISBN ' + Core.pretty(e.isbn) : '';
+  if (e.undone) return { cls: 'undone', st: 'Deshecho', tt: e.title || isbnTxt || 'Foto', sub: 'No se ha añadido' };
+  if (e.kind === 'noisbn') return { cls: 'warn', st: 'No es un ISBN', tt: 'Código ' + e.code, sub: 'Apártalo: añádelo con una foto o a mano' };
+  if (e.kind === 'shotfail') return { cls: 'warn', st: 'Foto', tt: 'No se pudo hacer la foto', sub: 'Vuelve a intentarlo' };
+  if (e.kind === 'again') {
+    const prev = scan.log.find(x => x.isbn === e.isbn && x.recId && !x.undone);
+    const pr = prev && state.records.get(prev.recId);
+    const d = !pr && findDuplicate(e.isbn);
+    if (d) return { cls: 'ok', st: 'Ya lo tienes', tt: d.title || isbnTxt, sub: who(d) || 'Está en tu biblioteca', img: cover(d) };
+    return { cls: '', st: 'Ya escaneado', tt: (pr && pr.title) || isbnTxt, sub: 'Ya está en este escaneo', img: cover(pr) };
+  }
+  if (e.kind === 'dup') {
+    const d = state.records.get(e.dupId);
+    return { cls: 'ok', st: 'Ya lo tienes', tt: (d && d.title) || isbnTxt, sub: d ? who(d) || 'Está en tu biblioteca' : 'Está en tu biblioteca', img: cover(d) };
+  }
+  if (e.kind === 'shot' && !e.recId) return { cls: '', st: 'Foto', tt: 'Leyendo la foto…', sub: 'Código de barras y, si no, el ISBN impreso' };
+  if (!r) return { cls: 'undone', st: 'Quitado', tt: isbnTxt || 'Foto', sub: '' };
+  const undo = true;
+  switch (r.status) {
+    case 'procesando': return { cls: '', st: e.kind === 'shot' ? 'Foto · ISBN leído' : 'Leído', tt: isbnTxt || Core.pretty(r.isbn13 || ''), sub: 'Buscando el libro…', img: cover(r), undo };
+    case 'registrado': return { cls: 'ok', st: 'Añadido', tt: r.title || isbnTxt, sub: who(r) || isbnTxt, img: cover(r), undo };
+    case 'duplicado': return { cls: 'warn', st: 'Ya lo tienes', tt: r.title || isbnTxt, sub: 'Queda en la lista como posible duplicado', img: cover(r), undo };
+    case 'no_encontrado': return { cls: 'warn', st: r.lookupError ? 'Consulta fallida' : 'No encontrado', tt: 'ISBN ' + Core.pretty(r.isbn13), sub: r.lookupError ? 'Podrás reintentarla al terminar' : 'Queda en la lista para completarlo', img: cover(r), undo };
+    case 'varios': return { cls: 'warn', st: 'Varios ISBN', tt: 'En la foto hay varios ISBN', sub: 'Elige el bueno en la lista al terminar', img: cover(r), undo };
+    default: return { cls: 'warn', st: 'Sin ISBN', tt: 'No se ha leído ningún ISBN', sub: 'Queda en la lista para corregirlo', img: cover(r), undo };
+  }
+}
+function renderScanLog() {
+  if (!scan.open) return;
+  const items = scan.log.slice(-3);
+  const html = items.map((e, i) => {
+    const w = scanEntryView(e);
+    return `<li class="${w.cls}${i < items.length - 1 ? ' old' : ''}">${w.img || '<div class="sc"></div>'}
+      <div class="tx"><div class="st">${esc(w.st)}</div><div class="tt">${esc(w.tt)}</div>${w.sub ? `<div class="sub">${esc(w.sub)}</div>` : ''}</div>
+      ${w.undo ? `<button type="button" data-undo="${e.id}">Deshacer</button>` : ''}</li>`;
+  }).join('');
+  if (html !== scan.logHTML) { $('#scan-log').innerHTML = html; scan.logHTML = html; }
+  const n = scan.log.filter(e => (e.kind === 'rec' || e.kind === 'shot') && !e.undone && (!e.recId || state.records.has(e.recId))).length;
+  $('#scan-count').textContent = `${n} libro${n === 1 ? '' : 's'}`;
+}
+async function undoScan(id) {
+  const e = scan.log.find(x => x.id === id);
+  if (!e || e.undone || !e.recId) return;
+  const r = state.records.get(e.recId);
+  e.title = r && r.title; e.undone = true;
+  if (e.isbn) { scan.undone.add(e.isbn); scan.seen.set(e.isbn, Date.now()); }
+  if (r) await remove(r.id);
+  if (scan.batch) { scan.batch.total = batchRecords(scan.batch.id).length; saveMeta(); }
+  renderList(); renderSummary(); renderLibCount(); renderScanLog();
+}
+window.addEventListener('popstate', () => { if (scan.open) closeScanner(true); });
+document.addEventListener('visibilitychange', () => {
+  if (!scan.open) return;
+  if (document.visibilityState === 'hidden') stopCamera();
+  else { keepAwake(true); if ($('#scan-err').hidden) startCamera(); }
+});
+
 /* ---------------- recuento y filtros ---------------- */
 function countBy(list) {
   const c = { registrado: 0, no_leido: 0, no_encontrado: 0, varios: 0, duplicado: 0, procesando: 0, corrected: 0 };
@@ -2468,7 +2865,7 @@ const issuesPending = r => {
 const needsReview = r => r.status === 'varios' || r.status === 'duplicado' || (r.status === 'registrado' && ((r.ocrCorrected && !r.ocrChecked) || issuesPending(r)));
 function photoRecords() {
   return [...state.records.values()]
-    .filter(r => r.file || r.status !== 'registrado')
+    .filter(r => r.file || r.method === 'camara' || r.status !== 'registrado')
     .sort((a, b) => (b.batchId || 0) - (a.batchId || 0) || (a.seq || 0) - (b.seq || 0) || collator.compare(a.file || '', b.file || ''));
 }
 function listFilterFn(f) {
@@ -2481,9 +2878,11 @@ function listFilterFn(f) {
 /* ---------------- render: lista de fotos ---------------- */
 const STATUS_TEXT = Core.STATUS_LABEL;
 function thumbHTML(r, cls = 'thumb') {
-  return r.thumb
-    ? `<img class="${cls}" src="${r.thumb}" alt="" data-act="zoom" loading="lazy">`
-    : `<div class="noimg">Sin foto</div>`;
+  if (r.thumb) return `<img class="${cls}" src="${r.thumb}" alt="" data-act="zoom" loading="lazy">`;
+  // Escaneado con la cámara: no hay foto, se enseña la portada si la hay
+  const cv = r.method === 'camara' && r.coverUrl && r.coverUrl !== SIN_PORTADA ? r.coverUrl : '';
+  return cv ? `<img class="${cls}" src="${esc(cv)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="cursor:default" onerror="this.style.visibility='hidden'">`
+    : `<div class="noimg">${r.method === 'camara' ? 'Escaneado' : 'Sin foto'}</div>`;
 }
 function itemHTML(r) {
   const facts = [];
@@ -2518,7 +2917,7 @@ function itemHTML(r) {
         <span class="status s-${r.status}">${esc(STATUS_TEXT[r.status] || r.status)}</span>
         ${r.status === 'registrado' && r.ocrCorrected && !r.ocrChecked ? '<span class="tagline">Corregido por OCR · revisa</span>' : ''}
         ${r.status === 'registrado' && issuesPending(r) ? '<span class="tagline">Revisar datos</span>' : ''}
-        <span class="file">${esc(r.file || 'Sin foto')}</span>
+        <span class="file">${esc(r.file || (r.method === 'camara' ? 'Escaneado con la cámara' : 'Sin foto'))}</span>
       </div>
       ${r.title ? `<div class="title">${esc(r.title)}</div>` : ''}
       ${metaLine ? `<div class="meta">${esc(metaLine)}</div>` : ''}
@@ -2812,18 +3211,19 @@ function renderSummary() {
   const when = new Date(b.endedAt || b.startedAt).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' });
   const failItem = r => `<li data-goto="${r.id}">
       ${r.thumb ? `<img src="${r.thumb}" alt="">` : '<div class="noimg"></div>'}
-      <div><div class="fn">${esc(r.file || 'sin foto')}</div>
+      <div><div class="fn">${esc(r.file || (r.method === 'camara' ? (r.title || 'Escaneado con la cámara') : 'sin foto'))}</div>
       <div class="sub">${esc(r.status === 'no_encontrado' ? 'ISBN ' + Core.pretty(r.isbn13) + (r.lookupError ? ' · consulta fallida: ' + r.lookupError : ' · no está en Google Books ni en Open Library') : r.status === 'varios' ? 'Varios ISBN: elige uno' : r.status === 'duplicado' ? 'Posible duplicado' : r.status === 'registrado' ? (issuesPending(r) ? 'Revisar: ' : 'Corregido por OCR: ') + (r.title || '') : (r.heicFail ? 'HEIC no compatible' : 'Sin ISBN válido'))}</div></div></li>`;
   const group = (title, color, list) => list.length ? `<div class="fail-group"><h3><span class="dot" style="background:${color}"></span>${title} · ${list.length}</h3><ul class="fail-list">${list.map(failItem).join('')}</ul></div>` : '';
-  const running = state.running;
+  const running = state.running || state.scanning;
+  const what = b.kind === 'camara' ? 'escaneo' : 'proceso';
   const allGood = !running && b.finished && c.registrado === recs.length && c.corrected === 0;
   box.hidden = false;
   box.innerHTML = `
-    <div class="eyebrow">${running ? 'Proceso en curso' : b.finished ? 'Resumen del último proceso' : 'Proceso interrumpido'} · ${esc(when)}</div>
+    <div class="eyebrow">${running ? (b.kind === 'camara' ? 'Escaneo en curso' : 'Proceso en curso') : b.finished ? `Resumen del último ${what}` : 'Proceso interrumpido'} · ${esc(when)}</div>
     <div class="big">Registrados: <b>${c.registrado}</b> de ${N}</div>
     ${!running && !b.finished ? `<div class="notice danger" style="margin-top:10px"><b>Faltan ${N - done} fotos por procesar.</b> Selecciona de nuevo las mismas fotos para continuar; las ya procesadas se omiten.</div>` : ''}
     ${state.rateLimited && !gbApiKey() ? `<div class="notice" style="margin-top:10px"><b>Google Books ha limitado las consultas anónimas.</b> La herramienta espera y reintenta sola, pero con una clave de API gratuita (pestaña Datos) el problema desaparece y además va más rápido.</div>` : ''}
-    ${allGood ? `<div class="notice ok" style="margin-top:10px">Todas las fotos de este proceso están registradas.</div>` : ''}
+    ${allGood ? `<div class="notice ok" style="margin-top:10px">${b.kind === 'camara' ? 'Todos los libros de este escaneo están registrados.' : 'Todas las fotos de este proceso están registradas.'}</div>` : ''}
     <div class="stats">
       <div class="stat ok"><div class="n">${c.registrado}</div><div class="l">Registrados</div></div>
       <div class="stat danger"><div class="n">${c.no_leido}</div><div class="l">No leídas</div></div>
@@ -2844,7 +3244,7 @@ function renderSummary() {
 function renderResume() {
   const box = $('#resume');
   const b = meta.batch;
-  if (!b || b.finished || state.running) { box.hidden = true; return; }
+  if (!b || b.finished || state.running || state.scanning || b.kind === 'camara') { box.hidden = true; return; }
   const n = batchRecords(b.id).length;
   box.hidden = false;
   box.className = 'notice danger';
@@ -3537,6 +3937,23 @@ function bind() {
   ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => { const fs = [...(e.dataTransfer.files || [])]; if (fs.length) processFiles(fs); });
+  // Cámara: escaneo continuo y foto directa
+  $('#scan-btn').hidden = !CAN_SCAN;
+  $('#shot-btn').hidden = !IS_MOBILE;
+  // En el móvil manda el escáner; en el ordenador, subir fotos
+  $('#scan-btn').classList.toggle('primary', IS_MOBILE);
+  $('#pick-btn').classList.toggle('primary', !(IS_MOBILE && CAN_SCAN));
+  $('#scan-btn').addEventListener('click', openScanner);
+  const shotIn = $('#shot-input');
+  shotIn.addEventListener('change', () => { const f = shotIn.files[0]; shotIn.value = ''; if (f) processFiles([renameShot(f)], { shot: true }); });
+  $('#scan-done').addEventListener('click', () => closeScanner(false));
+  $('#scan-shot').addEventListener('click', takeScanShot);
+  $('#scan-torch').addEventListener('click', toggleTorch);
+  $('#scan-log').addEventListener('click', e => { const b = e.target.closest('[data-undo]'); if (b) undoScan(b.dataset.undo); });
+  $('#scan-err').addEventListener('click', e => {
+    const b = e.target.closest('[data-scan]'); if (!b) return;
+    if (b.dataset.scan === 'retry') { $('#scan-err').hidden = true; startCamera(); } else closeScanner(false);
+  });
   $('#stop-btn').addEventListener('click', () => { state.stop = true; $('#prog-step').textContent = 'Deteniendo al terminar la foto actual…'; });
 
   $('#list-filter').addEventListener('click', e => {
@@ -4012,6 +4429,7 @@ const Drive = (() => {
 /* ---------------- arranque ---------------- */
 async function init() {
   bind();
+  const revive = [];
   // Idiomas sugeridos para los campos de idioma
   const dl = document.createElement('datalist'); dl.id = 'dl-langs';
   dl.innerHTML = ['Español', 'Inglés', 'Francés', 'Alemán', 'Italiano', 'Portugués', 'Catalán', 'Gallego', 'Euskera', 'Latín', 'Griego'].map(l => `<option value="${l}">`).join('');
@@ -4020,7 +4438,11 @@ async function init() {
     const all = await DB.all();
     const stale = [];
     for (const r of all) {
-      if (r.status === 'procesando') { stale.push(r.id); continue; }   // interrumpido a mitad de foto
+      if (r.status === 'procesando') {
+        // Escaneado con la cámara y sin consultar todavía: se retoma; foto a medias: se descarta
+        if (r.method === 'camara' && r.isbn13) { state.records.set(r.id, r); revive.push(r); continue; }
+        stale.push(r.id); continue;
+      }
       state.records.set(r.id, r);
     }
     for (const id of stale) await DB.del(id);
@@ -4030,6 +4452,8 @@ async function init() {
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   renderAll();
+  for (const r of revive) enqueueLookup(() => lookupScanned(r));
+  if (meta.batch && meta.batch.kind === 'camara' && !meta.batch.finished) { meta.batch.finished = true; saveMeta(); }
   Drive.start();
   // Primera vez en este navegador: medir las imágenes de «sin portada» y volver a pintar para ocultarlas
   if (!rellenos) calibrateRellenos().then(() => { if (rellenos) { state.brokenCovers.clear(); renderAll(); } }).catch(() => {});

@@ -243,6 +243,10 @@ table.diff th{position:sticky;top:0;background:var(--tint);text-align:left;font-
 table.diff td{border-top:1px solid var(--rule);padding:6px 8px;vertical-align:top;word-break:break-word}
 table.diff td.old{color:var(--muted);text-decoration:line-through}
 
+.drive-pill{appearance:none;font:inherit;font-size:12px;line-height:1;padding:8px 12px;margin-bottom:4px;border:1px solid var(--rule-2);border-radius:999px;background:var(--paper);color:var(--muted);cursor:pointer;white-space:nowrap}
+.drive-pill.attn{border-color:var(--warn);color:var(--warn);font-weight:500}
+.foot{padding:28px 0 40px;font-size:12px;color:var(--muted)}
+.foot a{color:var(--muted)}
 </style>
 </head>
 <body>
@@ -252,6 +256,7 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
       <div class="brand">
         <h1>Biblioteca <em>personal</em></h1>
       </div>
+      <button class="drive-pill" id="drive-pill" type="button" hidden></button>
     </div>
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" data-view="library" aria-selected="true">Biblioteca<span class="count" id="lib-count"></span></button>
@@ -357,6 +362,13 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
 
   <!-- ================= DATOS ================= -->
   <section class="view" id="view-data" hidden>
+    <div class="panel" id="drive-panel">
+      <div class="eyebrow">Sincronización</div>
+      <h2>Google Drive</h2>
+      <p class="lede">Guarda la biblioteca en tu Google Drive y la mantiene igual en todos tus dispositivos: conéctalo en cada uno con la misma cuenta. La app solo puede ver los archivos que crea ella misma, nunca el resto de tu Drive.</p>
+      <div id="drive-info" style="margin-top:16px"></div>
+      <p class="small" style="margin-top:14px">En la carpeta <b>Biblioteca</b> de tu Drive hay dos archivos: <b>biblioteca.json</b>, que es el que usa la app para sincronizar (no lo edites), y <b>biblioteca.csv</b>, una copia para abrir en Excel que se actualiza sola. Lo que cambies en esa copia no vuelve a la app: para eso, descárgala, corrígela y usa «Aplicar correcciones desde CSV». La sesión de Google dura una hora; después, un toque en «Toca para sincronizar» la renueva. Lo que cambies mientras tanto se guarda aquí y se sube al reconectar.</p>
+    </div>
     <div class="panel">
       <div class="eyebrow">Exportar</div>
       <h2>CSV completo</h2>
@@ -410,13 +422,14 @@ table.diff td.old{color:var(--muted);text-decoration:line-through}
       <div class="eyebrow">Almacenamiento</div>
       <h2>Datos en este navegador</h2>
       <dl class="kv" id="storage-info"></dl>
-      <p class="small" style="margin-top:12px">Los datos se guardan en este navegador y este dispositivo. Si abres el archivo en otro navegador u otro equipo, empieza vacío: usa Exportar / Importar CSV para moverlos.</p>
+      <p class="small" style="margin-top:12px">Los datos se guardan en este navegador y este dispositivo. Para tenerlos también en otros, conecta Google Drive. «Borrar todo» solo borra lo de este navegador: si Drive está conectado, lo desconecta y no toca la copia de Drive.</p>
       <div class="btn-row" style="margin-top:16px">
         <button class="btn danger" id="wipe-btn">Borrar todo</button>
       </div>
     </div>
   </section>
 </main>
+<footer class="foot"><div class="wrap"><a href="privacidad.html">Privacidad</a></div></footer>
 
 
 <div class="modal" id="modal" hidden><div class="sheet" id="sheet"></div></div>
@@ -663,7 +676,7 @@ const Core = (() => {
     ['Notas', r => r.notes],
     ['Estado', r => STATUS_LABEL[r.status] || r.status],
     ['Fuente', r => r.source],
-    ['Portada', r => r.coverData ? 'foto-propia' : r.coverUrl],
+    ['Portada', r => r.coverUrl],
     ['Portada fijada', r => r.coverLocked ? 'Sí' : ''],
     ['Revisado', r => r.issuesChecked ? 'Sí' : ''],
     ['Revisado por Claude', r => r.claudeReviewed ? 'Sí' : 'No'],   // solo CSV: no se muestra en la app
@@ -749,7 +762,7 @@ const Core = (() => {
       if (o.pages) rec.pages = o.pages.replace(/\D/g, '') || '';
       if (o.tags) rec.tags = o.tags.split(/\s*\|\s*/).filter(Boolean);
       if (o.translators) rec.translators = o.translators.split(/\s*,\s*/).filter(Boolean);
-      if (o.coverUrl === 'foto-propia') { delete rec.coverUrl; rec.coverOwnPhoto = true; }
+      if (o.coverUrl === 'foto-propia') delete rec.coverUrl;   // valor de versiones antiguas: se ignora
       if (o.coverLocked) rec.coverLocked = /^s[ií]|^y|^1|^true/i.test(o.coverLocked);
       if (o.issuesChecked) rec.issuesChecked = /^s[ií]|^y|^1|^true/i.test(o.issuesChecked);
       if (o.claudeReviewed) rec.claudeReviewed = /^s[ií]|^y|^1|^true/i.test(o.claudeReviewed);
@@ -982,7 +995,6 @@ const Core = (() => {
     const fields = present.map(h => (h in PRESENT_TO_FIELD) ? PRESENT_TO_FIELD[h] : h).filter(f => f && UPDATABLE.includes(f));
     const changes = [];
     for (const f of fields) {
-      if (f === 'coverUrl' && incoming.coverOwnPhoto) continue;      // "foto-propia": se conserva la imagen guardada
       const before = norm(existing[f]), after = norm(incoming[f]);
       if (before !== after) changes.push({ field: f, label: FIELD_LABEL[f] || f, before, after, hidden: HIDDEN_FIELDS.includes(f) });
     }
@@ -1121,8 +1133,10 @@ async function save(rec) {
   catch (e) { toast('No se pudo guardar en el navegador: ' + (e && e.message || e)); }
 }
 async function remove(id) {
+  const old = state.records.get(id);
   state.records.delete(id);
   await DB.del(id);
+  if (old && old.status !== 'procesando') Drive.noteDeleted(id);
 }
 function newRecord(extra) {
   return {
@@ -1844,7 +1858,7 @@ async function workYearFromWikidata(qid, title) {
      Las de Google y CEGAL se miden una vez pidiendo la portada de algo que no existe. */
 const MIN_ANCHO = 250;
 const SIN_PORTADA = 'sin-portada';
-const hasCoverImg = r => !!(r.coverData || (r.coverUrl && r.coverUrl !== SIN_PORTADA));
+const hasCoverImg = r => !!(r.coverUrl && r.coverUrl !== SIN_PORTADA);
 const RELLENO_KEY = 'biblioteca.rellenos.v2';
 let rellenos = (() => { try { return JSON.parse(localStorage.getItem(RELLENO_KEY)) || null; } catch (e) { return null; } })();
 const coverFamily = url => /books\.google/.test(url) ? 'google' : /static\.cegal\.es/.test(url) ? 'cegal' : /covers\.openlibrary\.org/.test(url) ? 'openlibrary' : 'otra';
@@ -2938,7 +2952,7 @@ function filteredLibrary() {
 }
 const READ_SHORT = { pendiente: 'Pendiente', leyendo: 'Leyendo', leido: 'Leído' };
 function coverHTML(r) {
-  const src = r.coverData || (r.coverUrl && r.coverUrl !== SIN_PORTADA ? r.coverUrl : '');
+  const src = r.coverUrl && r.coverUrl !== SIN_PORTADA ? r.coverUrl : '';
   return `<div class="cover"><div class="ph"><div class="pt">${esc(r.title)}</div><div class="pa">${esc((r.authors || [])[0] || '')}</div></div>
     ${src ? `<img src="${esc(src)}" data-id="${r.id}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="coverFail(this)" onload="coverLoaded(this)">` : ''}</div>`;
 }
@@ -3214,7 +3228,7 @@ function openCoverPicker(r) {
       <div class="pick-img"><span class="small">Buscando…</span></div>
       <div class="ct-src">${label}${note ? `<br><span style="color:var(--warn)">${note}</span>` : ''}</div>
       <div class="ct-meta"><span class="pick-dim"></span><span class="pick-flag"></span></div></div>`;
-  const current = hasCoverImg(r) ? (r.coverData || r.coverUrl) : '';
+  const current = hasCoverImg(r) ? r.coverUrl : '';
   openModal(`
     <div class="sheet-head"><div><div class="eyebrow">Editar portada</div><h2>${esc(r.title)}</h2></div>
       <button class="close" data-close aria-label="Cerrar">×</button></div>
@@ -3224,7 +3238,7 @@ function openCoverPicker(r) {
       <div class="pick-row">
         ${r.isbn13 ? card('google', 'Google Books') + card('openlibrary', 'Open Library') + card('cegal', 'todostuslibros', 'con marca de agua') : ''}
         <div class="pick-card ${r.coverUrl === SIN_PORTADA ? 'current' : ''}" data-key="none">
-          <div class="pick-img">${coverHTML({ ...r, coverUrl: '', coverData: '', readStatus: '' })}</div>
+          <div class="pick-img">${coverHTML({ ...r, coverUrl: '', readStatus: '' })}</div>
           <div class="ct-src">Sin portada</div><div class="ct-meta"><span>Tarjeta con el título</span><span>${r.coverUrl === SIN_PORTADA ? '<b>Actual</b>' : ''}</span></div>
         </div>
       </div>
@@ -3264,7 +3278,7 @@ function openCoverPicker(r) {
   });
 }
 async function setCover(r, best, none = false) {
-  r.coverData = '';
+  delete r.coverData;
   if (none) { r.coverUrl = SIN_PORTADA; r.coverW = ''; r.coverH = ''; r.coverBest = true; r.coverOther = false; r.coverFallback = ''; }
   else setCoverFields(r, best);
   r.coverLocked = true;
@@ -3303,7 +3317,7 @@ async function onPickerAction(e) {
    interrumpir: la próxima vez continúa donde se quedó. */
 async function improveCovers(btn) {
   const out = $('#improve-result');
-  const recs = libraryRecords().filter(r => r.coverUrl !== SIN_PORTADA && !r.coverData && r.coverCmp !== 2 && (r.isbn13 || r.coverUrl));
+  const recs = libraryRecords().filter(r => r.coverUrl !== SIN_PORTADA && r.coverCmp !== 2 && (r.isbn13 || r.coverUrl));
   if (!recs.length) {
     const low = libraryRecords().filter(r => hasCoverImg(r) && r.coverW && +r.coverW < MIN_ANCHO).length;
     out.innerHTML = `<div class="notice ok">Todas las portadas están revisadas.${low ? ` ${low} siguen en baja resolución porque no hay una mejor en Google Books ni en Open Library: para esas, prueba «Editar portada».` : ''}</div>`;
@@ -3344,9 +3358,8 @@ async function improveCovers(btn) {
 }
 
 /* ---------------- exportar / importar ---------------- */
-function exportCSV() {
+function exportRecords() {
   const recs = [...state.records.values()].filter(r => r.status !== 'procesando');
-  if (!recs.length) { toast('No hay registros que exportar.'); return; }
   const order = { registrado: 0, varios: 1, duplicado: 2, no_encontrado: 3, no_leido: 4 };
   const chrono = (a, b) => {
     const ba = a.authorBirth === '' || a.authorBirth == null ? Infinity : +a.authorBirth;
@@ -3354,6 +3367,11 @@ function exportCSV() {
     return ba - bb || collator.compare(authorsStr(a) || '~', authorsStr(b) || '~') || (+a.year || 9999) - (+b.year || 9999) || collator.compare(a.title || '', b.title || '');
   };
   recs.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || chrono(a, b) || collator.compare(a.file || '', b.file || ''));
+  return recs;
+}
+function exportCSV() {
+  const recs = exportRecords();
+  if (!recs.length) { toast('No hay registros que exportar.'); return; }
   const blob = new Blob([Core.toCSV(recs)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3633,12 +3651,363 @@ function bind() {
     if (!btn.dataset.confirm) btn.dataset.confirm = 'Pulsa otra vez para borrarlo todo';
     if (!arm(btn)) return;
     if (state.running) { toast('Detén el proceso antes de borrar.'); return; }
+    const wasDrive = Drive.state.connected;
+    if (wasDrive) Drive.disconnect();
     await DB.clear();
     state.records.clear(); meta = { apiKey: meta.apiKey }; saveMeta();
-    renderAll(); renderStorage(); toast('Todos los datos borrados.');
+    renderAll(); renderStorage(); toast(wasDrive ? 'Borrado en este navegador y Drive desconectado. La copia de Drive no se ha tocado.' : 'Todos los datos borrados.', 5000);
   });
 
 }
+
+/* ---------------- Google Drive: sincronización entre dispositivos ----------------
+   En la carpeta «Biblioteca» del Drive del usuario se guardan dos archivos:
+   - biblioteca.json: copia fiel de los registros (sin fotos), borrados y alias. Es la que se sincroniza.
+   - biblioteca.csv: copia legible para Excel. Solo se escribe; no se lee.
+   Permiso drive.file: la app solo ve los archivos que ha creado ella.
+   Cada libro lleva updatedAt; al combinar gana la versión más reciente de cada libro.
+   Los borrados se apuntan (id → fecha) para que se propaguen. */
+const Drive = (() => {
+  const CLIENT_ID = '871914354431-oi35nl5sn8juh64pi2o4ng18bro7ao9a.apps.googleusercontent.com';
+  const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+  const KEY = 'biblioteca.drive.v1', TOKEN_KEY = 'biblioteca.drive.token';
+  const FOLDER = 'Biblioteca', JSON_NAME = 'biblioteca.json', CSV_NAME = 'biblioteca.csv';
+  const API = 'https://www.googleapis.com/drive/v3', UP = 'https://www.googleapis.com/upload/drive/v3';
+  const GIS_URL = 'https://accounts.google.com/gsi/client';
+  const LOCAL_ONLY = ['thumb', 'preview', 'coverData'];   // imágenes: se quedan en cada dispositivo
+  const TOMB_MS = 180 * 864e5;                             // los borrados se recuerdan 6 meses
+  const supported = /^https?:$/.test(location.protocol);
+
+  let st = load();
+  let token = null, tokenExp = 0, tokenClient = null, gisP = null;
+  let running = null, again = false, timer = null, changeSeq = 0, applying = false;
+  let status = { kind: st.connected ? 'idle' : 'off', msg: '' };
+  try { const t = JSON.parse(sessionStorage.getItem(TOKEN_KEY)); if (t && t.exp > Date.now()) { token = t.token; tokenExp = t.exp; } } catch (e) { /* */ }
+
+  function load() {
+    try { return Object.assign({ deleted: {} }, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) { return { deleted: {} }; }
+  }
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* */ } }
+  const tokenValid = () => !!token && Date.now() < tokenExp;
+  const ts = r => (r && (r.updatedAt || r.addedAt)) || 0;
+  const stripLocal = r => { const o = { ...r }; LOCAL_ONLY.forEach(k => delete o[k]); return o; };
+  const withLocal = (r, local) => { const o = stripLocal(r); if (local) LOCAL_ONLY.forEach(k => { if (local[k]) o[k] = local[k]; }); return o; };
+  const syncable = r => r.status !== 'procesando';
+
+  function setStatus(kind, msg = '') { status = { kind, msg }; render(); }
+
+  /* ---------- inicio de sesión (Google Identity Services, modelo de token) ---------- */
+  function loadGIS() {
+    if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+    if (!gisP) gisP = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = GIS_URL; s.async = true;
+      s.onload = () => res();
+      s.onerror = () => { gisP = null; rej(new Error('No se pudo cargar el inicio de sesión de Google.')); };
+      document.head.appendChild(s);
+    });
+    return gisP;
+  }
+  /* Debe llamarse dentro de un toque o clic: abre la ventana de Google. */
+  function requestToken() {
+    return new Promise((res, rej) => {
+      const go = () => {
+        if (!tokenClient) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, callback: () => {} });
+        tokenClient.callback = resp => {
+          if (!resp || resp.error) return rej(new Error(resp && resp.error === 'access_denied' ? 'Has cancelado el permiso.' : 'Google no ha dado acceso' + (resp && resp.error ? ` (${resp.error})` : '') + '.'));
+          if (!google.accounts.oauth2.hasGrantedAllScopes(resp, SCOPE)) return rej(new Error('Hace falta marcar la casilla de Google Drive en la ventana de permisos.'));
+          token = resp.access_token;
+          tokenExp = Date.now() + (Number(resp.expires_in || 3600) - 120) * 1000;
+          try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ token, exp: tokenExp })); } catch (e) { /* */ }
+          res();
+        };
+        tokenClient.error_callback = err => rej(new Error(err && err.type === 'popup_closed' ? 'Se cerró la ventana de Google.' : err && err.type === 'popup_failed_to_open' ? 'El navegador bloqueó la ventana de Google. Permite ventanas emergentes para esta web.' : 'No se pudo iniciar sesión en Google.'));
+        tokenClient.requestAccessToken(st.email ? { login_hint: st.email } : {});
+      };
+      if (window.google && google.accounts && google.accounts.oauth2) go();
+      else loadGIS().then(go, rej);
+    });
+  }
+  function dropToken() { token = null; tokenExp = 0; try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* */ } }
+
+  /* ---------- API de Drive ---------- */
+  class AuthError extends Error {}
+  async function api(method, url, { json, body, type, raw } = {}) {
+    if (!tokenValid()) throw new AuthError('Sesión de Google caducada.');
+    const headers = { Authorization: 'Bearer ' + token };
+    if (json !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(json); }
+    else if (type) headers['Content-Type'] = type;
+    let r;
+    try { r = await fetch(url, { method, headers, body }); }
+    catch (e) { throw new Error('Sin conexión con Google Drive.'); }
+    if (r.status === 401) { dropToken(); throw new AuthError('Sesión de Google caducada.'); }
+    if (!r.ok) {
+      let m = ''; try { m = (await r.json()).error.message; } catch (e) { /* */ }
+      const err = new Error(`Google Drive respondió ${r.status}${m ? ': ' + m : ''}`); err.status = r.status; throw err;
+    }
+    return raw ? r.text() : r.status === 204 ? null : r.json();
+  }
+  const q = s => encodeURIComponent(s);
+  async function findOne(query, fields = 'id') {
+    const j = await api('GET', `${API}/files?q=${q(query + ' and trashed=false')}&spaces=drive&orderBy=modifiedTime desc&pageSize=10&fields=files(${fields})`);
+    return (j.files || [])[0] || null;
+  }
+  async function fileMeta(id) {
+    try { const m = await api('GET', `${API}/files/${id}?fields=id,version,trashed,parents`); return m.trashed ? null : m; }
+    catch (e) { if (e.status === 404) return null; throw e; }
+  }
+  async function ensureFolder() {
+    if (st.folderId) {
+      const m = await fileMeta(st.folderId);
+      if (m) return st.folderId;
+      st.folderId = st.jsonId = st.csvId = null;
+    }
+    const f = await findOne(`mimeType='application/vnd.google-apps.folder' and name='${FOLDER}'`);
+    st.folderId = f ? f.id : (await api('POST', `${API}/files?fields=id`, { json: { name: FOLDER, mimeType: 'application/vnd.google-apps.folder' } })).id;
+    st.jsonId = st.csvId = null;
+    persist();
+    return st.folderId;
+  }
+  /* Metadatos del JSON remoto (o null si todavía no existe). */
+  async function jsonMeta() {
+    if (st.jsonId) {
+      const m = await fileMeta(st.jsonId);
+      if (m && (m.parents || []).includes(st.folderId)) return m;
+      st.jsonId = null;
+    }
+    const f = await findOne(`name='${JSON_NAME}' and '${st.folderId}' in parents`, 'id,version');
+    if (f) { st.jsonId = f.id; persist(); }
+    return f;
+  }
+  async function writeFile(idKey, name, mime, content) {
+    if (st[idKey]) {
+      try { return await api('PATCH', `${UP}/files/${st[idKey]}?uploadType=media&fields=id,version`, { body: content, type: mime }); }
+      catch (e) { if (e.status !== 404) throw e; st[idKey] = null; }
+    }
+    if (idKey === 'csvId') {   // el CSV puede existir aunque este dispositivo no lo sepa
+      const f = await findOne(`name='${name}' and '${st.folderId}' in parents`);
+      if (f) { st[idKey] = f.id; return api('PATCH', `${UP}/files/${f.id}?uploadType=media&fields=id,version`, { body: content, type: mime }); }
+    }
+    const b = 'b' + Math.random().toString(36).slice(2);
+    const multipart = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [st.folderId], mimeType: mime })}\r\n` +
+      `--${b}\r\nContent-Type: ${mime}\r\n\r\n${content}\r\n--${b}--`;
+    const r = await api('POST', `${UP}/files?uploadType=multipart&fields=id,version`, { body: multipart, type: 'multipart/related; boundary=' + b });
+    st[idKey] = r.id; persist();
+    return r;
+  }
+
+  /* ---------- combinar ---------- */
+  function pruneTombs(d) { const lim = Date.now() - TOMB_MS; for (const k of Object.keys(d)) if (!(d[k] > lim)) delete d[k]; return d; }
+  function payload() {
+    return {
+      app: 'biblioteca', format: 1, savedAt: Date.now(),
+      records: [...state.records.values()].filter(syncable).map(stripLocal),
+      deleted: pruneTombs({ ...st.deleted }),
+      aliases: aliasMap,
+    };
+  }
+  async function merge(remote, firstTime) {
+    const remoteRecs = (remote.records || []).filter(r => r && r.id);
+    const rDel = remote.deleted || {};
+    const del = pruneTombs({ ...rDel });
+    for (const [k, v] of Object.entries(st.deleted)) if (!(del[k] >= v)) del[k] = v;
+    let needUpload = Object.keys(del).some(k => !(rDel[k] >= del[k]));
+    const toPut = [], toDel = [];
+    const remoteById = new Map(remoteRecs.map(r => [r.id, r]));
+
+    // Primera sincronización de este dispositivo: un mismo libro puede tener otro ID aquí
+    // (catalogado o importado por separado). Se empareja por ISBN o título+autor.
+    if (firstTime) {
+      const byKey = new Map();
+      for (const R of remoteRecs) if (!state.records.has(R.id)) { const k = Core.mergeKey(R); if (k && !byKey.has(k)) byKey.set(k, R); }
+      for (const L of [...state.records.values()]) {
+        if (!syncable(L) || remoteById.has(L.id)) continue;
+        const k = Core.mergeKey(L), R = k && byKey.get(k);
+        if (!R) continue;
+        byKey.delete(k);
+        toDel.push(L.id);
+        if (ts(L) > ts(R)) { toPut.push({ ...L, id: R.id }); needUpload = true; } else toPut.push(withLocal(R, L));
+        remoteById.delete(R.id);   // ya resuelto
+      }
+    }
+    for (const R of remoteById.values()) {
+      const L = state.records.get(R.id);
+      if (L && !syncable(L)) continue;
+      const d = del[R.id] || 0;
+      if (d && d >= ts(R) && (!L || d >= ts(L))) { if (L) toDel.push(R.id); continue; }
+      if (!L) { toPut.push(withLocal(R)); continue; }
+      if (ts(R) > ts(L)) toPut.push(withLocal(R, L));
+      else if (ts(L) > ts(R)) needUpload = true;
+    }
+    const remoteIds = new Set(remoteRecs.map(r => r.id));
+    for (const L of state.records.values()) {
+      if (!syncable(L) || remoteIds.has(L.id) || toDel.includes(L.id)) continue;
+      const d = del[L.id] || 0;
+      if (d && d >= ts(L)) toDel.push(L.id); else needUpload = true;
+    }
+    // Alias de autores: unión (lo de este dispositivo prevalece)
+    const ra = remote.aliases || {};
+    const mergedAliases = { ...ra, ...aliasMap };
+    if (Object.keys(mergedAliases).length !== Object.keys(aliasMap).length) { aliasMap = mergedAliases; saveJSON(ALIAS_KEY, aliasMap); }
+    if (Object.keys(aliasMap).some(k => ra[k] !== aliasMap[k])) needUpload = true;
+
+    st.deleted = del;
+    applying = true;
+    try {
+      for (const id of toDel) { state.records.delete(id); await DB.del(id); }
+      for (const r of toPut) state.records.set(r.id, r);
+      if (toPut.length) await DB.putMany(toPut);
+    } finally { applying = false; }
+    return { changed: toPut.length + toDel.length, needUpload };
+  }
+
+  /* ---------- sincronizar ---------- */
+  function sync() {
+    if (running) { again = true; return running; }
+    running = doSync().finally(() => {
+      running = null;
+      if (again) { again = false; schedule(500); }
+    });
+    return running;
+  }
+  async function doSync() {
+    if (!st.connected) return;
+    if (!tokenValid()) { setStatus('auth'); return; }
+    if (state.running) { schedule(15000); return; }   // se espera a que termine el catalogado
+    clearTimeout(timer);
+    setStatus('syncing');
+    const seq = changeSeq;
+    try {
+      await ensureFolder();
+      const m = await jsonMeta();
+      let needUpload = !!st.dirty || !m, changed = 0;
+      if (m && String(m.version) !== String(st.version || '')) {
+        const text = await api('GET', `${API}/files/${m.id}?alt=media`, { raw: true });
+        let remote;
+        try { remote = JSON.parse(text); } catch (e) { throw new Error('El archivo biblioteca.json de Drive está dañado. No se ha tocado nada.'); }
+        if (!remote || remote.app !== 'biblioteca' || !Array.isArray(remote.records)) throw new Error('El archivo biblioteca.json de Drive no es de esta app. No se ha tocado nada.');
+        if (remote.format > 1) throw new Error('La biblioteca de Drive se guardó con una versión más nueva de la app. Recarga la página.');
+        const res = await merge(remote, !st.synced);
+        changed = res.changed; needUpload = needUpload || res.needUpload;
+        st.version = m.version;
+      }
+      if (needUpload) {
+        const r = await writeFile('jsonId', JSON_NAME, 'application/json', JSON.stringify(payload()));
+        st.version = r.version;
+        await writeFile('csvId', CSV_NAME, 'text/csv', Core.toCSV(exportRecords()));
+      }
+      st.synced = true;
+      st.lastSync = Date.now();
+      if (changeSeq === seq) st.dirty = false; else again = true;
+      persist();
+      setStatus('ok');
+      if (changed) { renderAll(); toast(`Drive: ${changed} cambio${changed === 1 ? '' : 's'} de otro dispositivo.`); }
+    } catch (e) {
+      persist();
+      if (e instanceof AuthError) setStatus('auth');
+      else { setStatus('error', e.message || String(e)); schedule(60000); }
+    }
+  }
+  function schedule(ms) { clearTimeout(timer); timer = setTimeout(sync, ms); }
+
+  /* ---------- avisos desde el resto de la app ---------- */
+  function noteChanged() {
+    if (applying) return;
+    changeSeq++;
+    if (!st.connected) return;
+    if (!st.dirty) { st.dirty = true; persist(); }
+    if (tokenValid()) schedule(3000); else setStatus('auth');
+  }
+  function noteDeleted(id) { st.deleted[id] = Date.now(); persist(); noteChanged(); }
+
+  /* ---------- acciones ---------- */
+  async function connect() {
+    if (!supported) { toast('Google Drive solo funciona desde la web publicada, no desde un archivo abierto en el disco.'); return; }
+    setStatus('connecting');
+    try {
+      await requestToken();
+      if (!st.email || !st.connected) {
+        const a = await api('GET', `${API}/about?fields=user(emailAddress)`);
+        st.email = a.user && a.user.emailAddress || st.email;
+      }
+      st.connected = true; persist();
+      await sync();
+    } catch (e) {
+      setStatus(st.connected ? 'auth' : 'off');
+      if (!(e instanceof AuthError)) toast(e.message || String(e), 6000);
+    }
+  }
+  function disconnect({ revoke = true } = {}) {
+    if (revoke && token && window.google && google.accounts && google.accounts.oauth2) { try { google.accounts.oauth2.revoke(token, () => {}); } catch (e) { /* */ } }
+    clearTimeout(timer); dropToken();
+    st = { deleted: {} }; persist();
+    setStatus('off');
+  }
+
+  /* ---------- interfaz ---------- */
+  const when = t => t ? new Date(t).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  function render() {
+    const pill = document.getElementById('drive-pill');
+    if (pill) {
+      const k = status.kind;
+      pill.hidden = !st.connected;
+      pill.className = 'drive-pill' + (k === 'auth' || k === 'error' ? ' attn' : '');
+      pill.textContent = k === 'syncing' || k === 'connecting' ? 'Sincronizando…'
+        : k === 'auth' ? (st.dirty ? 'Toca para guardar en Drive' : 'Toca para sincronizar')
+        : k === 'error' ? 'Error de Drive · reintentar'
+        : st.dirty ? 'Cambios sin subir' : 'Drive al día';
+      pill.title = k === 'error' ? status.msg : st.lastSync ? 'Última sincronización: ' + when(st.lastSync) : '';
+    }
+    const box = document.getElementById('drive-info');
+    if (!box) return;
+    if (!supported) {
+      box.innerHTML = `<div class="notice">Solo funciona desde la web publicada. Abierta como archivo del disco, Google no permite iniciar sesión.</div>`;
+      return;
+    }
+    if (!st.connected) {
+      box.innerHTML = `<div class="btn-row"><button class="btn primary" data-drive="connect" ${status.kind === 'connecting' ? 'disabled' : ''}>${status.kind === 'connecting' ? 'Conectando…' : 'Conectar con Google Drive'}</button></div>`;
+      return;
+    }
+    const estado = status.kind === 'syncing' || status.kind === 'connecting' ? 'Sincronizando…'
+      : status.kind === 'auth' ? 'Sesión caducada: pulsa «Sincronizar ahora»' + (st.dirty ? ' (hay cambios sin subir)' : '')
+      : status.kind === 'error' ? `<span style="color:var(--danger)">${esc(status.msg)}</span>`
+      : st.dirty ? 'Cambios pendientes de subir' : 'Al día';
+    box.innerHTML = `
+      <dl class="kv">
+        <dt>Cuenta</dt><dd>${esc(st.email || '—')}</dd>
+        <dt>Estado</dt><dd>${estado}</dd>
+        <dt>Última vez</dt><dd>${when(st.lastSync)}</dd>
+        <dt>Carpeta</dt><dd>Mi unidad › ${FOLDER}</dd>
+      </dl>
+      <div class="btn-row" style="margin-top:16px">
+        <button class="btn primary" data-drive="sync" ${status.kind === 'syncing' ? 'disabled' : ''}>Sincronizar ahora</button>
+        <button class="btn ghost" data-drive="disconnect" data-confirm="Pulsa otra vez para desconectar">Desconectar</button>
+      </div>`;
+  }
+  function onClick(e) {
+    const b = e.target.closest('[data-drive], #drive-pill');
+    if (!b) return;
+    const act = b.id === 'drive-pill' ? 'sync' : b.dataset.drive;
+    if (act === 'connect') connect();
+    else if (act === 'sync') { if (tokenValid()) sync(); else connect(); }
+    else if (act === 'disconnect') { if (!arm(b)) return; disconnect(); toast('Desconectado. La biblioteca sigue en este dispositivo y la copia de Drive no se ha tocado.'); }
+  }
+  function start() {
+    document.addEventListener('click', onClick);
+    render();
+    if (!supported) return;
+    if (st.connected) loadGIS().catch(() => {});   // precargado: la ventana de Google tiene que abrirse en el mismo toque
+    if (st.connected) { if (tokenValid()) sync(); else setStatus('auth'); }
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && st.connected && tokenValid()) sync(); });
+    setInterval(() => { if (document.visibilityState === 'visible' && st.connected && tokenValid() && !running) sync(); }, 60000);
+    setInterval(() => { if (st.connected && !tokenValid() && status.kind === 'ok') setStatus('auth'); }, 30000);
+  }
+
+  // Cada escritura en la base local avisa a la sincronización
+  for (const k of ['put', 'putMany']) { const orig = DB[k]; DB[k] = async (...a) => { const r = await orig(...a); noteChanged(); return r; }; }
+
+  return { start, sync, connect, disconnect, noteDeleted, render, get state() { return st; }, get status() { return status; }, _merge: merge, _setToken: (t, exp) => { token = t; tokenExp = exp; } };
+})();
 
 /* ---------------- arranque ---------------- */
 async function init() {
@@ -3661,10 +4030,11 @@ async function init() {
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   renderAll();
+  Drive.start();
   // Primera vez en este navegador: medir las imágenes de «sin portada» y volver a pintar para ocultarlas
   if (!rellenos) calibrateRellenos().then(() => { if (rellenos) { state.brokenCovers.clear(); renderAll(); } }).catch(() => {});
 }
-window.__app = { _test: { readBarcode, loadImage, locateBarcodes, toCanvas, zxingDecode, loadZX: () => loadScript(CDN.zxing) }, state, Core, processFiles, exportCSV, importCSV, lookupISBN, searchByTitle, DB, get meta() { return meta; } };
+window.__app = { _test: { readBarcode, loadImage, locateBarcodes, toCanvas, zxingDecode, loadZX: () => loadScript(CDN.zxing) }, state, Core, processFiles, exportCSV, importCSV, lookupISBN, searchByTitle, DB, Drive, get meta() { return meta; } };
 init();
 })();
 

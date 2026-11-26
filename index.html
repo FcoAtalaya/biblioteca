@@ -3661,6 +3661,8 @@ async function init() {
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   renderAll();
+  // Primera vez en este navegador: medir las imágenes de «sin portada» y volver a pintar para ocultarlas
+  if (!rellenos) calibrateRellenos().then(() => { if (rellenos) { state.brokenCovers.clear(); renderAll(); } }).catch(() => {});
 }
 window.__app = { _test: { readBarcode, loadImage, locateBarcodes, toCanvas, zxingDecode, loadZX: () => loadScript(CDN.zxing) }, state, Core, processFiles, exportCSV, importCSV, lookupISBN, searchByTitle, DB, get meta() { return meta; } };
 init();
